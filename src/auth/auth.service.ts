@@ -7,10 +7,16 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthDto } from './dto/auth.dto';
 import * as argon from 'argon2';
 import { PrismaClientKnownRequestError } from 'generated/prisma/runtime/library';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService,
+    private config: ConfigService,
+  ) {}
   async login({ dto }: { dto: AuthDto }) {
     const user = await this.prisma.user.findUnique({
       where: {
@@ -28,11 +34,12 @@ export class AuthService {
     }
 
     // Exclude password
-    const { password, ...safeUser } = user;
-
+    const { password, firstName, lastName, ...safeUser } = user;
+    const token = await this.signToken(user.id);
     return {
       message: 'User logged in successfully',
-      user: safeUser,
+      user: { ...safeUser },
+      token, 
     };
   }
 
@@ -67,5 +74,17 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  signToken(userId: number): Promise<string> {
+    const data = {
+      sub: userId,
+    };
+    const secret = this.config.get('JWT_SECRET');
+
+    return this.jwt.signAsync(data, {
+      expiresIn: '15m',
+      secret,
+    });
   }
 }
